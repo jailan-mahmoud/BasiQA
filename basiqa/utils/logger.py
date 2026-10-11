@@ -52,7 +52,7 @@ class MessageLogger():
             train (dict): Contains 'total_iter' (int) for total iters.
             use_tb_logger (bool): Use tensorboard logger.
         start_iter (int): Start iter. Default: 1.
-        tb_logger (obj:`tb_logger`): Tensorboard logger. Default： None.
+        tb_logger (obj:`tb_logger`): Tensorboard logger. Default: None.
     """
 
     def __init__(self, opt, start_iter=1, tb_logger=None):

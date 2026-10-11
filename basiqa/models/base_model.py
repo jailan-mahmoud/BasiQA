@@ -172,8 +172,8 @@ class BaseModel():
 
         Args:
             current_iter (int): Current iteration.
-            warmup_iter (int)： Warmup iter numbers. -1 for no warmup.
-                Default： -1.
+            warmup_iter (int): Warmup iter numbers. -1 for no warmup.
+                Default: -1.
         """
         if current_iter > 1:
             for scheduler in self.schedulers:
