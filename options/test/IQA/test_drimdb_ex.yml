@@ -9,7 +9,7 @@ datasets:
     name: test Fundus Score
     type: ScoreImageDataset3
     image_folder: ./datasets/drimdb
-    csv_path: /data/huden/BasiQA/datasets/drimdb/score_list.csv
+    csv_path: ./datasets/drimdb/score_list.csv
     io_backend:
       type: disk
 
@@ -25,7 +25,7 @@ datasets:
   # test_2:
   #   name: Fundus Score Train set
   #   type: ScoreImageDataset3
-  #   image_folder: ./datasets/data
+  #   image_folder: ./datasets/FIQSDataset/images
   #   csv_path: ./experiments/Swin_hyper_bs4_ex1/models/3_train.csv
   #   io_backend:
   #     type: disk

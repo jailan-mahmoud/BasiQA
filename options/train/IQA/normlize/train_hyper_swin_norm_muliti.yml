@@ -6,7 +6,7 @@ num_gpu: 1  # set num_gpu: 0 for cpu mode
 multitrain: true
 round: 3
 dataset_random_fetch: true
-random_fetch_path: ./datasets/data/score_list_new.csv
+random_fetch_path: ./datasets/FIQSDataset/meta_data.xlsx
 val_ratio: 0.19
 # if dataset_random_fetch is on, the csv_path would be disbaled in the train and val phase.
 # a new csv would be created and saved in the models folder
@@ -17,8 +17,8 @@ datasets:
   train:
     name: FundusIQA
     type: ScoreImageDataset3
-    image_folder: ./datasets/data
-    csv_path: ./datasets/data/score_list_train.csv
+    image_folder: ./datasets/FIQSDataset/images
+    csv_path: ./datasets/FIQSDataset/divisions/cross_validation-00-train.xlsx
     io_backend:
       type: disk
 
@@ -40,8 +40,8 @@ datasets:
   val:
     name: testFundus
     type: ScoreImageDataset3
-    image_folder: ./datasets/data
-    csv_path: ./datasets/data/score_list_test.csv
+    image_folder: ./datasets/FIQSDataset/images
+    csv_path: ./datasets/FIQSDataset/divisions/cross_validation-00-val.xlsx
     io_backend:
       type: disk
 
