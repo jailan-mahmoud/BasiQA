@@ -1,3 +1,4 @@
 *.pyc
 /datasets/FIQSDataset/
 /pretrained_weight/net_g*
+/papers
