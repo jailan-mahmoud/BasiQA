@@ -43,29 +43,29 @@ save = recombine.to_csv(osp.join(work_path, 'prediction_recombine.csv'))
 
 if svm==True:
 
-  # 使用 lr 类，初始化模型
+  # Use the LR class to initialize the model
   lre = LogisticRegression(
       penalty="l2", C=1.0, random_state=None, solver="lbfgs", max_iter=3000,
       multi_class='ovr', verbose=0,
   )
 
-  # 使用训练数据来学习（拟合），不需要返回值，训练的结果都在对象内部变量中
+  # Learn (fit) from the training data; no return value is needed, the results are stored in the object's internal variables
   preds2=np.reshape(preds2,(-1,1))
   gt2=(100*np.array(gt2)).astype(int).tolist()
   lre.fit(preds2, gt2)
 
-  # 使用测试数据来预测，返回值预测分类数据
+  # Predict on the test data; returns the predicted class labels
   y_pred = lre.predict(preds2)
 
-  # 打印主要分类指标的文本报告
+  # Print a text report of the main classification metrics
   print('--- report ---')
   print(classification_report(gt2, y_pred,digits=4))
 
-  # 打印模型的参数
+  # Print the model parameters
   print('--- params ---')
   print(lre.coef_, lre.intercept_)
 
-  # 打印 auc
+  # Print the AUC
   # print('--- auc ---')
   # print(roc_auc_score(gt2, y_pred))
 

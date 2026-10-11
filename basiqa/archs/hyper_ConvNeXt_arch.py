@@ -70,7 +70,7 @@ class ConvNextBackbone(nn.Module):
             nn.Conv2d(in_ch, dims[0], kernel_size=4, stride=4),
             LayerNorm(dims[0], eps=1e-6, data_format="channels_first")
         )
-        # 经过stem层之后从3x384x384变为96x96x96
+        # After the stem layer, 3x384x384 becomes 96x96x96
         self.downsample_layers.append(stem)
         for i in range(3):
             downsample_layer = nn.Sequential(
@@ -78,7 +78,7 @@ class ConvNextBackbone(nn.Module):
                 nn.Conv2d(dims[i], dims[i + 1], kernel_size=2, stride=2),
             )
             self.downsample_layers.append(downsample_layer)
-        # 每次经过一个down192x48x48, 384x24x24, 768x12x12
+        # After each down layer: 192x48x48, 384x24x24, 768x12x12
 
         # stages (or extracting layers)
         self.stages = nn.ModuleList()  # 4 feature resolution stages, each consisting of multiple residual blocks
@@ -99,15 +99,15 @@ class ConvNextBackbone(nn.Module):
             sub_pool = nn.Sequential(
                 nn.Conv2d(int(dims[ind]), int(dims[ind] / 8), kernel_size=1, stride=1, padding=0, bias=False),
                 nn.AvgPool2d(feat_size, stride=feat_size), )
-            # 首先进行一次降维，然后进行平均池化例如96x96x96会变为 12x8x8
-            # 然后在FC层中，12x8x8变为目标网络所需要的通道数量(32)
-            # 第二层第三层的数据分别为 24x4x4 48x2x2 所有的输出都是32通道的
+            # First reduce the dimensions, then apply average pooling, e.g. 96x96x96 becomes 12x8x8
+            # Then in the FC layer, 12x8x8 is converted to the number of channels required by the target network (32)
+            # The second and third layers have 24x4x4 and 48x2x2 respectively; all outputs have 32 channels
             sub_fc = nn.Linear(int(dims[ind] / 8 * 64 / (4 ** ind)), ffa_out_ch)
             self.fcl_pool.append(sub_pool)
             self.fcl_fc.append(sub_fc)
-        # 最后一层无需降维，将剩余特征全部转化为收集为feature
+        # The last layer needs no dimension reduction; convert all remaining features into the collected feature
         sub_pool = nn.AvgPool2d(feat_size, stride=feat_size)
-        sub_fc = nn.Linear(dims[ind + 1], tn_in_ch - ffa_out_ch * 3)  # 总的通道数对齐到target network input channel
+        sub_fc = nn.Linear(dims[ind + 1], tn_in_ch - ffa_out_ch * 3)  # Align the total number of channels to the target network input channel
         self.fcl_pool.append(sub_pool)
         self.fcl_fc.append(sub_fc)
 
@@ -127,7 +127,7 @@ class ConvNextBackbone(nn.Module):
             x = self.stages[i](x)
             fcl_results.append(self.fcl_fc[i](self.fcl_pool[i](x).view(x.size(0), -1)))
         fcl_res = torch.cat((fcl_results[0], fcl_results[1], fcl_results[2], fcl_results[3]), 1)
-        # 输出包含两部分，一部分是hyper network要作为参数来源的输入张量(batch*768x12x12)，另一部分则是作为目标网络输入的向量(batch*384)
+        # The output has two parts: one is the input tensor (batch*768x12x12) that the hyper network uses as its parameter source, the other is the vector (batch*384) used as the target network input
         out = {}
         out['hyper_in_feat'] = x
         out['target_in_vec'] = fcl_res
@@ -147,14 +147,14 @@ class HyperNetCN(nn.Module):
         self.feature_size=feat_size
         self.bb_out_ch=dims[-1]
         self.out_channels=out_channel
-        # 基础骨架使用上方的convNext，所有参数可以调节
+        # The base backbone uses the ConvNeXt above; all parameters are tunable
         self.bbone = ConvNextBackbone(ffa_out_ch, tn_in_ch, in_ch, feat_size, depths, dims, drop_path_rate,
                                       layer_scale_init_value, )
 
-        # 卷积性的头部，将数据降维到应有的输入维度
-        # 这一个例子中的tn输入为384，共5层，则每一层的参数量为384x192, 192x96, 96x48, 48x24, 24x1
-        # 而第一层中所用的384x192个参数通过384x12x12获得,第二层使用192x12x12获得192x96个参数，以此类推
-        # 已经含有激活函数
+        # Convolutional head that reduces the data to the required input dimensions
+        # In this example the tn input is 384 with 5 layers, so the parameter counts per layer are 384x192, 192x96, 96x48, 48x24, 24x1
+        # The 384x192 parameters of the first layer are obtained from 384x12x12, the second layer uses 192x12x12 to get 192x96 parameters, and so on
+        # Already includes the activation function
         self.conv1x1 = nn.ModuleList()
         sub_1x1 = nn.Sequential(nn.Conv2d(dims[-1], hyper_in_ch, stride=1, kernel_size=1, padding=0), nn.GELU(), )
         self.conv1x1.append(sub_1x1)
@@ -164,8 +164,8 @@ class HyperNetCN(nn.Module):
                           padding=0), nn.GELU(), )
             self.conv1x1.append(sub_1x1)
 
-        # 这是得到参数的卷积层和全连接层，分别得到权重和偏置
-        # 因为在上一步中已经使用了1x1卷积，所以这一步中的3x3卷积能节省一部分参数，且基本没有信息瓶颈
+        # These are the conv and fully connected layers that produce the parameters, giving the weights and biases respectively
+        # Since a 1x1 convolution was already used in the previous step, the 3x3 convolution here saves some parameters with essentially no information bottleneck
         #
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.weight_conv = nn.ModuleList()
@@ -176,7 +176,7 @@ class HyperNetCN(nn.Module):
             sub_bias = nn.Linear(int(hyper_in_ch / 2 ** ind), int(tn_in_ch / 2 ** (ind + 1)))
             self.weight_conv.append(sub_weight)
             self.bias_conv.append(sub_bias)
-        # 最后一层将输出变为1，最小的1x12x12都明显过量，所以单独添加为一个FC层
+        # The last layer reduces the output to 1; even the smallest 1x12x12 is clearly excessive, so it is added separately as an FC layer
         sub_weight = nn.Linear(int(hyper_in_ch / 2 ** 4*feat_size**2), int(tn_in_ch / 2 ** 4)*self.out_channels)
         sub_bias = nn.Linear(int(hyper_in_ch / 2 ** 4*feat_size**2), self.out_channels)
         self.weight_conv.append(sub_weight)
@@ -192,7 +192,7 @@ class HyperNetCN(nn.Module):
         bb_out=self.bbone(x)
         tn_in=bb_out['target_in_vec'].view(-1,self.target_input_channel,1,1)
         hyper_in=bb_out['hyper_in_feat'].view(-1,self.bb_out_ch,self.feature_size,self.feature_size)
-        # 生成1-4层Fc的参数
+        # Generate the parameters of FC layers 1-4
         tn_para_w=[]
         tn_para_b=[]
         for ind in range(4):
@@ -200,12 +200,12 @@ class HyperNetCN(nn.Module):
             tn_para_w.append(self.weight_conv[ind](hyper_in).view(-1,int(self.target_input_channel/2**(ind+1)),int(self.target_input_channel/2**(ind)),1,1))
             tn_para_b.append(self.bias_conv[ind](self.avgpool(hyper_in).squeeze()).view(-1,int(self.target_input_channel/2**(ind+1))))
 
-        # 最后一层
+        # Last layer
         hyper_in=torch.flatten(self.conv1x1[4](hyper_in),1)
         tn_para_w.append(self.weight_conv[4](hyper_in).view(-1,self.out_channels,int(self.target_input_channel/2**4),1,1))
         tn_para_b.append(self.bias_conv[4](hyper_in).view(-1,self.out_channels))
 
-        # 规定输出名称
+        # Specify the output names
         out = {}
         out['target_in_vec'] = tn_in
         out['target_fc1w'] = tn_para_w[0]
