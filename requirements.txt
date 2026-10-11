@@ -1,6 +1,6 @@
 addict
 future
-lmdb
+lmdb==1.4.1
 numpy<2.0
 opencv-python
 Pillow
@@ -17,3 +17,6 @@ pandas
 scikit-learn
 openpyxl
 xlrd
+
+matplotlib
+tensorboard
