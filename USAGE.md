@@ -170,20 +170,7 @@ In short: a one-fold result tells you how the model did on one particular split.
 Entry point: [basiqa/train_multi.py](basiqa/train_multi.py)
 Experiment folders are created automatically under `experiments/<name>/` and TensorBoard logs under `tb_logger/<name>/`.
 
-### 2.1 Smoke test (sample dataset, 2000 iterations, batch 4)
-
-Uses [options/train/IQA/train_fthnet_trial.yml](options/train/IQA/train_fthnet_trial.yml). It trains and validates on the sample set and fine-tunes from the pretrained weights.
-
-```powershell
-$env:CUDA_VISIBLE_DEVICES="0"; python ./basiqa/train_multi.py -opt ./options/train/IQA/train_fthnet_trial.yml
-```
-```bash
-CUDA_VISIBLE_DEVICES=0 python ./basiqa/train_multi.py -opt ./options/train/IQA/train_fthnet_trial.yml
-```
-
-If `experiments/fth_trial_ex1/` already exists, it is renamed to `fth_trial_ex1_archived_<timestamp>` and a fresh run starts.
-
-### 2.2 Train / fine-tune on the full FIQS dataset
+### 2.1 Train / fine-tune on the full FIQS dataset
 
 The shipped config [options/train/IQA/train_fthnet_std_multi.yml](options/train/IQA/train_fthnet_std_multi.yml) points to `./datasets/data/score_list_*.csv`, which **does not exist in this repo**. Edit the following before running.
 
@@ -199,7 +186,7 @@ datasets:
     csv_path: ./datasets/FIQSDataset/divisions/cross_validation-00-val.xlsx
 ```
 
-**b) Network type**: the std config uses `type: FTHNet3`, but the provided pretrained weights were used with `FTHNet4` (see the trial and test configs). Set:
+**b) Network type**: the std config uses `type: FTHNet3`, but the provided pretrained weights were used with `FTHNet4` (see the test config). Set:
 
 ```yaml
 network_g:
@@ -233,7 +220,7 @@ $env:CUDA_VISIBLE_DEVICES="0"; python ./basiqa/train_multi.py -opt ./options/tra
 CUDA_VISIBLE_DEVICES=0 python ./basiqa/train_multi.py -opt ./options/train/IQA/train_fthnet_std_multi.yml
 ```
 
-### 2.3 Train on a custom dataset
+### 2.2 Train on a custom dataset
 
 ```powershell
 Copy-Item .\options\train\IQA\train_fthnet_std_multi.yml .\options\train\IQA\my_config.yml
@@ -243,36 +230,36 @@ $env:CUDA_VISIBLE_DEVICES="0"; python ./basiqa/train_multi.py -opt ./options/tra
 
 Change `name:` in the YAML so the experiment does not collide with an existing one.
 
-### 2.4 Override YAML values from the command line (no file edit)
+### 2.3 Override YAML values from the command line (no file edit)
 
 ```powershell
-python ./basiqa/train_multi.py -opt ./options/train/IQA/train_fthnet_trial.yml --force_yml train:total_iter=500 datasets:train:batch_size_per_gpu=2 name=my_quick_run
+python ./basiqa/train_multi.py -opt ./options/train/IQA/train_fthnet_std_multi.yml --force_yml train:total_iter=500 datasets:train:batch_size_per_gpu=2 name=my_quick_run
 ```
 
-### 2.5 Resume an interrupted run
+### 2.4 Resume an interrupted run
 
 Automatic (picks the newest `.state` in `experiments/<name>/training_states/`):
 
 ```powershell
-python ./basiqa/train_multi.py -opt ./options/train/IQA/train_fthnet_trial.yml --auto_resume
+python ./basiqa/train_multi.py -opt ./options/train/IQA/train_fthnet_std_multi.yml --auto_resume
 ```
 
 Manual: set `path.resume_state` in the YAML:
 
 ```yaml
 path:
-  resume_state: experiments/fth_trial_ex1/training_states/500.state
+  resume_state: experiments/fth_standard_ex1/training_states/500.state
 ```
 
-### 2.6 Debug mode (fast, no TensorBoard/archiving)
+### 2.5 Debug mode (fast, no TensorBoard/archiving)
 
 Use a `name` containing `debug` or pass the flag:
 
 ```powershell
-python ./basiqa/train_multi.py -opt ./options/train/IQA/train_fthnet_trial.yml --debug
+python ./basiqa/train_multi.py -opt ./options/train/IQA/train_fthnet_std_multi.yml --debug
 ```
 
-### 2.7 Other available training configs
+### 2.6 Other available training configs
 
 All under [options/train/IQA/](options/train/IQA/), run with the same command pattern:
 
@@ -293,14 +280,14 @@ Classification-variant configs (`hypernet/*class*.yml`) use [basiqa/train_class.
 python ./basiqa/train_class.py -opt ./options/train/IQA/hypernet/train_hyper_swin_class.yml
 ```
 
-### 2.8 Monitor training
+### 2.7 Monitor training
 
 ```powershell
 tensorboard --logdir ./tb_logger
 ```
 Open <http://localhost:6006>.
 
-### 2.9 Where the output goes
+### 2.8 Where the output goes
 
 ```
 experiments/<name>/
@@ -316,7 +303,7 @@ tb_logger/<name>/                         # TensorBoard events
 
 Use `experiments/<name>/models/0_net_g_latest.pth` (or the best checkpoint) for testing, see [1.3](#13-test-your-own-trained-checkpoint).
 
-### 2.10 (Optional) Regenerate the 10-fold splits
+### 2.9 (Optional) Regenerate the 10-fold splits
 
 ```powershell
 cd datasets\FIQSDataset
@@ -346,7 +333,7 @@ The repository does not contain the paper's numbers (the paper is still under re
 
 Protocol: for each fold `k` in 00..09, train a model on `cross_validation-0k-train.xlsx`, validate on `-val.xlsx`, test on `-test.xlsx`, then report the mean ± std of the 10 test results.
 
-**Step 1 – train one model per fold (PowerShell).** Use a single-run config (`multitrain: false`, edited as in [2.2](#22-train--fine-tune-on-the-full-fiqs-dataset)) and override the fold and name from the command line:
+**Step 1 – train one model per fold (PowerShell).** Use a single-run config (`multitrain: false`, edited as in [2.1](#21-train--fine-tune-on-the-full-fiqs-dataset)) and override the fold and name from the command line:
 
 ```powershell
 $env:CUDA_VISIBLE_DEVICES="0"
