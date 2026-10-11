@@ -76,11 +76,17 @@ def fetch_train_val_dataloader(round_num, opt, logger):
     # random fetch a new train and val dataloaders
     #csv will be saved in models folder
     train_loader, val_loaders = None, []
-    raw_data=pd.read_csv(opt['random_fetch_path'])
+    fetch_path = opt['random_fetch_path']
+    if fetch_path.lower().endswith(('.xlsx', '.xls')):
+        raw_data = pd.read_excel(fetch_path)
+    else:
+        raw_data = pd.read_csv(fetch_path)
     # load data
     pd_data = pd.DataFrame(raw_data)
     image_names = pd_data['file_name'].tolist()
-    scores = pd_data['level'].tolist()
+    # FIQS files use 'qualityLevel'; older level lists use 'level'
+    level_col = 'qualityLevel' if 'qualityLevel' in pd_data.columns else 'level'
+    scores = pd_data[level_col].tolist()
     total_len=len(scores)
     val_num=int(opt['val_ratio']*total_len)
     test_names=[]

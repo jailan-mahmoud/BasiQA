@@ -60,6 +60,16 @@ Select the GPU with `CUDA_VISIBLE_DEVICES` (see [USAGE.md](../USAGE.md)).
 - `val`: `val_freq` and metrics (L1, SRCC, PLCC, Accuracy, ...).
 - `logger`: `print_freq`, `save_checkpoint_freq`.
 
+## Dataset paths
+
+All train configs and `test/IQA/test_hyper.yml` point to the FIQS dataset:
+
+- `image_folder: ./datasets/FIQSDataset/images`
+- Configs with `dataset_random_fetch: true` re-split `random_fetch_path: ./datasets/FIQSDataset/meta_data.xlsx` (all 2246 images) every round. `val_ratio` sets the validation share, and each split is saved under `experiments/<name>/models/`.
+- `csv_path` points to `divisions/cross_validation-00-{train,val}.xlsx`. It is only used when `dataset_random_fetch: false`; otherwise it is overwritten by the random split.
+- The external test configs use `./datasets/eyeq`, `./datasets/deepdrid` and `./datasets/drimdb`. Those datasets are not included in this repo.
+
 ## Before you run a config
 
-- Some configs (for example `train_fthnet_multi_dummy.yml`) contain absolute server paths such as `/data/huden/BasiQA/...`. Change them to your local `./datasets/...` paths.
+- `train_fthnet_std_multi.yml` has `dataset_random_fetch: false`, so it reads the fold files in `divisions/`. Those files list `.jpeg` names, but `images/` contains `.PNG` files. Fix the extension before using them, or set `dataset_random_fetch: true`.
+- `network_g.type` in `train_fthnet_std_multi.yml` is `FTHNet3`, but the released weights were trained with `FTHNet4`.

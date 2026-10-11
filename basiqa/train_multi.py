@@ -72,11 +72,17 @@ def fetch_train_val_dataloader(round_num, opt, logger):
     # random fetch a new train and val dataloaders
     #csv will be saved in models folder
     train_loader, val_loaders = None, []
-    raw_data=pd.read_csv(opt['random_fetch_path'])
+    fetch_path = opt['random_fetch_path']
+    if fetch_path.lower().endswith(('.xlsx', '.xls')):
+        raw_data = pd.read_excel(fetch_path)
+    else:
+        raw_data = pd.read_csv(fetch_path)
     # load data
     pd_data = pd.DataFrame(raw_data)
     image_names = pd_data['file_name'].tolist()
-    scores = pd_data['opinion_score'].tolist()
+    # FIQS files use 'meanOpinionScore'; older score lists use 'opinion_score'
+    score_col = 'meanOpinionScore' if 'meanOpinionScore' in pd_data.columns else 'opinion_score'
+    scores = pd_data[score_col].tolist()
     total_len=len(scores)
     val_num=int(opt['val_ratio']*total_len)
     test_names=[]
@@ -86,9 +92,12 @@ def fetch_train_val_dataloader(round_num, opt, logger):
         test_names.append(image_names.pop(fortune))
         test_scores.append(scores.pop(fortune))
 
+    # write both column names so every score dataset class can read the split files
     train_pd=pd.DataFrame({'file_name': image_names,
+                             'meanOpinionScore': scores,
                              'opinion_score': scores,})
     test_pd=pd.DataFrame({'file_name': test_names,
+                          'meanOpinionScore': test_scores,
                           'opinion_score': test_scores,})
 
     csv_save_path= osp.join('experiments', opt['name'], 'models')
