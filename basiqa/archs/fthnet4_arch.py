@@ -9,7 +9,13 @@ import torch.utils.checkpoint as checkpoint
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
 from utils.registry import ARCH_REGISTRY
 import softpool_cuda
-from SoftPool import SoftPool2d
+from SoftPool import SoftPool2d as _SoftPool2d
+
+
+class SoftPool2d(_SoftPool2d):
+    # The SoftPool CUDA backward asserts its saved input is contiguous, so make it so.
+    def forward(self, x):
+        return super().forward(x.contiguous())
 
 
 class Mlp(nn.Module):
@@ -545,15 +551,15 @@ class SwinBackbone(nn.Module):
 
         self.fcl_fc = nn.ModuleList()
         for ind in range(3):
-            # 首先进行一次降维，然后进行平均池化例如[ 16, 145, 192]会变为 [ 16, 1, 192]
-            # 然后在FC层中，192,384,768变为目标网络所需要的通道数量(32)
+            # First reduce the dimensions, then apply average pooling, e.g. [ 16, 145, 192] becomes [ 16, 1, 192]
+            # Then in the FC layer, 192, 384, 768 are converted to the number of channels required by the target network (32)
             # embed_dim * 2 ** ind-3 is the channel, (8/2**ind)**2 is the number of flattened patch
             sub_fc = nn.Linear(int(embed_dim * 2 ** (ind-3) * (8/2**ind)**2), ffa_out_ch)
             self.fcl_fc.append(sub_fc)
-        # 将剩余特征全部转化为收集为feature
-        sub_fc = nn.Linear(int(embed_dim* (8/2**3)**2), tn_in_ch - ffa_out_ch * 3)  # 总的通道数对齐到target network input channel
+        # Convert all remaining features into the collected feature
+        sub_fc = nn.Linear(int(embed_dim* (8/2**3)**2), tn_in_ch - ffa_out_ch * 3)  # Align the total number of channels to the target network input channel
         self.fcl_fc.append(sub_fc)
-        # 将输出变为可以适应下一步输出的12**2维
+        # Convert the output to 12**2 dimensions to fit the next step
         self.norm = norm_layer(self.feature_ch)
 
         self.apply(self._init_weights)
@@ -587,7 +593,7 @@ class SwinBackbone(nn.Module):
             fcl_results.append(self.fcl_fc[ind](self.fcl_merge[ind](x.view(x.size(0),-1, self.window_size*2**(3-ind), self.window_size*2**(3-ind))).view(x.size(0), -1)))
 
         x = self.norm(x).permute(0,2,1)
-        # 输出包含两部分，一部分是hyper network要作为参数来源的输入张量(batch*768x12x12)，另一部分则是作为目标网络输入的向量(batch*384)
+        # The output has two parts: one is the input tensor (batch*768x12x12) that the hyper network uses as its parameter source, the other is the vector (batch*384) used as the target network input
         out = {}
         out['hyper_in_feat'] = x.view(-1, x.size(1), self.window_size, self.window_size)
         out['target_in_vec'] = torch.cat((fcl_results[0], fcl_results[1], fcl_results[2], fcl_results[3]), 1)
@@ -609,14 +615,14 @@ class FTHNet4(nn.Module):
         self.feature_size = window_size
         self.feature_ch = int(embed_dim * 2 ** (self.num_layers - 1))
 
-        # 基础骨架使用上方的Backbone，所有参数可以调节
+        # The base backbone uses the Backbone above; all parameters are tunable
         self.bbone = SwinBackbone( ffa_out_ch=ffa_out_ch, tn_in_ch=tn_in_ch,
                  embed_dim=embed_dim, depths=depths, num_heads=num_heads,
                  window_size=window_size, drop_rate=drop_rate, attn_drop_rate=attn_drop_rate, drop_path_rate=drop_path_rate, )
 
-        # 卷积性的头部，将数据降维到应有的输入维度
-        # 这一个例子中的tn输入为384，共5层，则每一层的参数量为384x192, 192x96, 96x48, 48x24, 24x1
-        # 而第一层中所用的384x192个参数通过384x12x12获得,第二层使用192x12x12获得192x96个参数，以此类推
+        # Convolutional head that reduces the data to the required input dimensions
+        # In this example the tn input is 384 with 5 layers, so the parameter counts per layer are 384x192, 192x96, 96x48, 48x24, 24x1
+        # The 384x192 parameters of the first layer are obtained from 384x12x12, the second layer uses 192x12x12 to get 192x96 parameters, and so on
         self.conv1x1 = nn.ModuleList()
         sub_1x1 = nn.Sequential(nn.Conv2d(self.feature_ch, hyper_in_ch, stride=1, kernel_size=1, padding=0), nn.GELU(), )
         self.conv1x1.append(sub_1x1)
@@ -626,8 +632,8 @@ class FTHNet4(nn.Module):
                           padding=0), nn.GELU(), )
             self.conv1x1.append(sub_1x1)
 
-        # 这是得到参数的卷积层和全连接层，分别得到权重和偏置
-        # 因为在上一步中已经使用了1x1卷积，所以这一步中的3x3卷积能节省一部分参数，且基本没有信息瓶颈
+        # These are the conv and fully connected layers that produce the parameters, giving the weights and biases respectively
+        # Since a 1x1 convolution was already used in the previous step, the 3x3 convolution here saves some parameters with essentially no information bottleneck
         #
         self.avgpool = SoftPool2d(kernel_size=window_size)
         self.weight_conv = nn.ModuleList()
@@ -638,7 +644,7 @@ class FTHNet4(nn.Module):
             sub_bias = nn.Linear(int(hyper_in_ch / 2 ** ind), int(tn_in_ch / 2 ** (ind + 1)))
             self.weight_conv.append(sub_weight)
             self.bias_conv.append(sub_bias)
-        # 最后一层将输出变为1，最小的1x12x12都明显过量，所以单独添加为一个FC层
+        # The last layer reduces the output to 1; even the smallest 1x12x12 is clearly excessive, so it is added separately as an FC layer
         sub_weight = nn.Linear(int(hyper_in_ch / 2 ** 4 * self.feature_size ** 2), int(tn_in_ch / 2 ** 4)*out_ch)
         sub_bias = nn.Linear(int(hyper_in_ch / 2 ** 4 * self.feature_size ** 2), out_ch)
         self.weight_conv.append(sub_weight)
@@ -661,23 +667,23 @@ class FTHNet4(nn.Module):
         bb_out = self.bbone(x)
         tn_in = bb_out['target_in_vec'].view(-1, self.target_input_channel, 1, 1)
         hyper_in = bb_out['hyper_in_feat'].view(-1, self.feature_ch, self.feature_size, self.feature_size)
-        # 生成1-4层Fc的参数
+        # Generate the parameters of FC layers 1-4
         tn_para_w = []
         tn_para_b = []
         for ind in range(4):
             hyper_in = self.conv1x1[ind](hyper_in)
-            tn_para_w.append(self.weight_conv[ind](hyper_in).view(-1, int(self.target_input_channel / 2 ** (ind + 1)),
-                                                                  int(self.target_input_channel / 2 ** (ind)), 1, 1))
+            tn_para_w.append(self.weight_conv[ind](hyper_in).reshape(-1, int(self.target_input_channel / 2 ** (ind + 1)),
+                                                                     int(self.target_input_channel / 2 ** (ind)), 1, 1))
             tn_para_b.append(self.bias_conv[ind](self.avgpool(hyper_in).squeeze()).view(-1,
                                                                                         int(self.target_input_channel / 2 ** (
                                                                                                     ind + 1))))
 
-        # 最后一层
+        # Last layer
         hyper_in = torch.flatten(self.conv1x1[4](hyper_in), 1)
         tn_para_w.append(self.weight_conv[4](hyper_in).view(-1, self.out_ch, int(self.target_input_channel / 2 ** 4), 1, 1))
         tn_para_b.append(self.bias_conv[4](hyper_in).view(-1, self.out_ch))
 
-        # 规定输出名称
+        # Specify the output names
         out = {}
         out['target_in_vec'] = tn_in
         out['target_fc1w'] = tn_para_w[0]
